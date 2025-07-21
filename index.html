@@ -1,0 +1,397 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+
+// 主應用程式組件
+const App = () => {
+    // 遊戲狀態
+    const [level, setLevel] = useState(1); // 當前關卡
+    const [score, setScore] = useState(0); // 分數
+    const [timeRemaining, setTimeRemaining] = useState(90); // 剩餘時間 (秒)，設定為 90 秒
+    const [gameStarted, setGameStarted] = useState(false); // 遊戲是否開始
+    const [gameOver, setGameOver] = useState(false); // 遊戲是否結束
+    const [gameWon, setGameWon] = useState(false); // 遊戲是否勝利
+    const [leftSymbols, setLeftSymbols] = useState([]); // 左側圖片的符號
+    const [rightSymbols, setRightSymbols] = useState([]); // 右側圖片的符號
+    const [differences, setDifferences] = useState([]); // 差異點列表
+    const [foundDifferencesCount, setFoundDifferencesCount] = useState(0); // 已找到的差異點數量
+    const [message, setMessage] = useState(''); // 遊戲訊息
+    const [highScore, setHighScore] = useState(0); // 最高分數 (當前會話)
+    const [recentScores, setRecentScores] = useState([]); // 近期三次遊玩成績
+    const timerRef = useRef(null); // 計時器引用
+
+    // 動物符號列表 (使用 Emoji)
+    const animalEmojis = ['🐱', '🐶', '🐰', '🐻', '🐼', '🦊', '🐷', '🐸', '🐵', '🦁', '🐯', '🦉', '🐧', '🐢', '🐠', '🦋'];
+
+    // 隨機生成一個介於 min 和 max 之間的整數
+    const getRandomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+    // 生成唯一的 ID
+    const generateUniqueId = () => `symbol_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // 根據關卡生成遊戲數據 (符號和差異)
+    const generateLevelData = useCallback(() => {
+        const numSymbols = getRandomInt(3 + level, 7 + level); // 符號數量隨關卡增加
+        const newLeftSymbols = [];
+        const baseSymbolSize = 4; // 基本符號大小 (rem)
+        const minSeparationPercentage = 15; // 符號中心點之間的最小百分比距離，用於避免重疊
+
+        // 生成左側圖片的符號
+        for (let i = 0; i < numSymbols; i++) {
+            let x, y;
+            let attempts = 0;
+            const maxAttempts = 500; // 防止無限循環，如果空間太小可能無法找到位置
+
+            // 嘗試找到一個不重疊的符號位置
+            do {
+                x = getRandomInt(10, 90); // 隨機 X 座標 (百分比)
+                y = getRandomInt(10, 90); // 隨機 Y 座標 (百分比)
+                let overlapping = false;
+
+                // 檢查與所有已放置符號的重疊情況
+                for (const existingSymbol of newLeftSymbols) {
+                    const distance = Math.sqrt(
+                        Math.pow(x - existingSymbol.x, 2) +
+                        Math.pow(y - existingSymbol.y, 2)
+                    );
+                    if (distance < minSeparationPercentage) {
+                        overlapping = true;
+                        break; // 發現重疊，重新嘗試
+                    }
+                }
+                if (!overlapping) {
+                    // 找到不重疊的位置，將符號加入列表
+                    newLeftSymbols.push({
+                        id: generateUniqueId(),
+                        emoji: animalEmojis[getRandomInt(0, animalEmojis.length - 1)],
+                        x: x,
+                        y: y,
+                        size: baseSymbolSize,
+                        rotation: 0,
+                    });
+                    break; // 跳出 do-while 循環，進入下一個符號的生成
+                }
+                attempts++;
+            } while (attempts < maxAttempts);
+
+            // 如果達到最大嘗試次數仍未找到不重疊位置，則強制加入（應極少發生）
+            if (attempts === maxAttempts) {
+                newLeftSymbols.push({
+                    id: generateUniqueId(),
+                    emoji: animalEmojis[getRandomInt(0, animalEmojis.length - 1)],
+                    x: x, // 使用最後嘗試的 X 座標
+                    y: y, // 使用最後嘗試的 Y 座標
+                    size: baseSymbolSize,
+                    rotation: 0,
+                });
+            }
+        }
+
+        // 複製左側符號作為右側符號的基礎
+        const newRightSymbols = JSON.parse(JSON.stringify(newLeftSymbols));
+        const newDifferences = [];
+        // 差異點數量隨關卡增加，但不超過符號總數
+        // 確保至少有 2 個差異，最多為符號總數的一半或 5 個，取較小值
+        const numDifferences = Math.min(getRandomInt(2, Math.floor(numSymbols / 2) + 1), 5);
+
+        // 隨機引入差異 (只保留符號種類不同)
+        const symbolsToModifyIndices = [];
+        while (symbolsToModifyIndices.length < numDifferences) {
+            const index = getRandomInt(0, newRightSymbols.length - 1);
+            if (!symbolsToModifyIndices.includes(index)) {
+                symbolsToModifyIndices.push(index);
+            }
+        }
+
+        symbolsToModifyIndices.forEach(index => {
+            const symbolToModify = newRightSymbols[index];
+            let newEmoji = animalEmojis[getRandomInt(0, animalEmojis.length - 1)];
+            while (newEmoji === symbolToModify.emoji) { // 確保新的 Emoji 不同
+                newEmoji = animalEmojis[getRandomInt(0, animalEmojis.length - 1)];
+            }
+            symbolToModify.emoji = newEmoji;
+            newDifferences.push({ symbolId: symbolToModify.id, type: 'emoji', found: false });
+        });
+
+        setLeftSymbols(newLeftSymbols);
+        setRightSymbols(newRightSymbols);
+        setDifferences(newDifferences);
+        setFoundDifferencesCount(0);
+        // setTimeRemaining(90); // 移除這裡的計時器重置
+        setMessage('');
+        setGameOver(false);
+        setGameWon(false);
+    }, [level]);
+
+    // 處理符號點擊事件
+    const handleSymbolClick = (clickedSymbolId) => {
+        if (!gameStarted || gameOver || gameWon) return;
+
+        // 檢查是否點擊到差異點
+        const diffIndex = differences.findIndex(diff =>
+            diff.symbolId === clickedSymbolId && !diff.found
+        );
+
+        if (diffIndex !== -1) {
+            // 找到差異點
+            const newDifferences = [...differences];
+            newDifferences[diffIndex].found = true; // 標記為已找到
+            setDifferences(newDifferences);
+            setFoundDifferencesCount(prev => prev + 1);
+            setScore(prev => prev + 100); // 增加分數
+            // 播放音效 (實際應用中可替換為音效文件)
+            console.log('找到一個差異！');
+        } else {
+            // 點擊錯誤，扣分
+            setScore(prev => Math.max(0, prev - 20)); // 最低為 0 分
+            setMessage('點錯了！');
+            setTimeout(() => setMessage(''), 1000); // 1 秒後清除訊息
+        }
+    };
+
+    // 遊戲開始
+    const startGame = () => {
+        setGameStarted(true);
+        setLevel(1);
+        setScore(0);
+        setTimeRemaining(90); // 遊戲開始時設定為 90 秒
+        generateLevelData();
+    };
+
+    // 重新開始遊戲
+    const restartGame = () => {
+        setGameStarted(false);
+        setGameOver(false);
+        setGameWon(false);
+        setLevel(1);
+        setScore(0);
+        setFoundDifferencesCount(0);
+        setTimeRemaining(90); // 重新開始時設定為 90 秒
+        setMessage('');
+        // 清除計時器，以防萬一
+        if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+        }
+    };
+
+    // 進入下一關
+    const nextLevel = () => {
+        setLevel(prev => prev + 1);
+        setGameStarted(true); // 確保遊戲狀態為開始
+        generateLevelData();
+    };
+
+    // 遊戲結束效果 (彈出視窗)
+    const showGameOverModal = () => (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+            <div className="bg-white p-8 rounded-lg shadow-xl text-center">
+                <h2 className="text-3xl font-bold mb-4 text-red-600">遊戲結束！</h2>
+                <p className="text-xl mb-2">您的分數：{score}</p>
+                <p className="text-xl mb-2 font-bold text-blue-700">最高分數：{highScore}</p>
+                {recentScores.length > 0 && (
+                    <div className="mb-6">
+                        <p className="text-lg font-semibold mb-1">近期成績：</p>
+                        <ul className="list-disc list-inside">
+                            {recentScores.map((s, index) => (
+                                <li key={index} className="text-md">{s} 分</li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
+                <button
+                    onClick={restartGame}
+                    className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-full transition duration-300 ease-in-out transform hover:scale-105 shadow-lg"
+                >
+                    重新開始
+                </button>
+            </div>
+        </div>
+    );
+
+    // 遊戲勝利效果 (彈出視窗)
+    const showGameWonModal = () => (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+            <div className="bg-white p-8 rounded-lg shadow-xl text-center">
+                <h2 className="text-3xl font-bold mb-4 text-green-600">恭喜您！</h2>
+                <p className="text-xl mb-6">您找到了所有差異！</p>
+                <button
+                    onClick={nextLevel}
+                    className="bg-green-500 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-full transition duration-300 ease-in-out transform hover:scale-105 shadow-lg"
+                >
+                    進入下一關 (關卡 {level + 1})
+                </button>
+            </div>
+        </div>
+    );
+
+    // 遊戲開始前的歡迎畫面
+    const showWelcomeScreen = () => (
+        <div className="flex flex-col items-center justify-center h-full">
+            <h1 className="text-5xl font-extrabold text-indigo-800 mb-8 animate-bounce">動物符號大家來找碴</h1>
+            <p className="text-xl text-gray-700 mb-12">找出左右兩圖中所有不一樣的動物符號！</p>
+            <button
+                onClick={startGame}
+                className="bg-purple-600 hover:bg-purple-800 text-white font-bold py-4 px-8 rounded-full text-2xl transition duration-300 ease-in-out transform hover:scale-110 shadow-xl"
+            >
+                開始遊戲
+            </button>
+        </div>
+    );
+
+    // 監控時間和遊戲狀態
+    useEffect(() => {
+        // 只有在遊戲開始、未結束且未勝利時才設定計時器
+        if (gameStarted && !gameOver && !gameWon) {
+            // 清除任何現有的計時器，以防重複設定
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+            }
+            timerRef.current = setInterval(() => {
+                setTimeRemaining(prevTime => {
+                    if (prevTime <= 1) {
+                        clearInterval(timerRef.current);
+                        setGameOver(true);
+                        setMessage('時間到！');
+                        return 0;
+                    }
+                    return prevTime - 1;
+                });
+            }, 1000);
+        } else {
+            // 如果遊戲停止、結束或勝利，清除計時器
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+                timerRef.current = null; // 清除引用
+            }
+        }
+
+        // 組件卸載或依賴項改變時清除計時器
+        return () => {
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+                timerRef.current = null;
+            }
+        };
+    }, [gameStarted, gameOver, gameWon]); // 依賴項：遊戲開始、結束、勝利狀態
+
+    // 監控是否找到所有差異
+    useEffect(() => {
+        if (gameStarted && differences.length > 0 && foundDifferencesCount === differences.length) {
+            setGameWon(true);
+            setMessage('恭喜！您找到了所有差異！');
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+            }
+        }
+    }, [foundDifferencesCount, differences.length, gameStarted]);
+
+    // 監控遊戲結束，更新最高分數和近期成績
+    useEffect(() => {
+        if (gameOver) {
+            setHighScore(prev => Math.max(prev, score));
+            setRecentScores(prevScores => {
+                const updatedScores = [...prevScores, score];
+                // 保持只顯示最近 3 次成績
+                if (updatedScores.length > 3) {
+                    return updatedScores.slice(updatedScores.length - 3);
+                }
+                return updatedScores;
+            });
+        }
+    }, [gameOver, score]);
+
+    // 在關卡或遊戲開始時生成新數據
+    useEffect(() => {
+        if (gameStarted && !gameOver && !gameWon) {
+            generateLevelData();
+        }
+    }, [level, gameStarted, gameOver, gameWon, generateLevelData]);
+
+
+    return (
+        <div className="min-h-screen bg-gradient-to-br from-blue-100 to-purple-200 font-inter flex flex-col items-center justify-center p-4">
+            {/* 遊戲標題和控制面板 */}
+            <div className="w-full max-w-4xl bg-white p-6 rounded-2xl shadow-xl mb-6 flex flex-col md:flex-row items-center justify-between gap-4">
+                <h1 className="text-4xl font-bold text-gray-800">動物符號大家來找碴</h1>
+                <div className="flex flex-wrap justify-center gap-4 text-lg font-semibold text-gray-700">
+                    <span>關卡: {level}</span>
+                    <span>分數: {score}</span>
+                    <span>時間: {timeRemaining}s</span>
+                    <span>差異點: {foundDifferencesCount} / {differences.length}</span>
+                </div>
+            </div>
+
+            {/* 遊戲主體 */}
+            {!gameStarted && !gameOver && !gameWon ? (
+                showWelcomeScreen()
+            ) : (
+                <div className="w-full max-w-4xl bg-white p-4 rounded-2xl shadow-xl flex flex-col md:flex-row gap-4 relative">
+                    {/* 左側圖片區域 */}
+                    <div className="relative w-full md:w-1/2 aspect-square bg-gray-50 rounded-xl overflow-hidden border-4 border-blue-300 shadow-inner">
+                        <h2 className="absolute top-2 left-2 text-xl font-bold text-gray-600 z-10">左邊</h2>
+                        {leftSymbols.map(symbol => (
+                            <div
+                                key={symbol.id}
+                                className="absolute text-4xl cursor-default select-none"
+                                style={{
+                                    left: `${symbol.x}%`,
+                                    top: `${symbol.y}%`,
+                                    fontSize: `${symbol.size}rem`,
+                                    transform: `translate(-50%, -50%) rotate(${symbol.rotation}deg)`,
+                                }}
+                            >
+                                {symbol.emoji}
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* 右側圖片區域 */}
+                    <div className="relative w-full md:w-1/2 aspect-square bg-gray-50 rounded-xl overflow-hidden border-4 border-purple-300 shadow-inner">
+                        <h2 className="absolute top-2 left-2 text-xl font-bold text-gray-600 z-10">右邊</h2>
+                        {rightSymbols.map(symbol => {
+                            const isDifference = differences.some(diff => diff.symbolId === symbol.id);
+                            const isFound = differences.some(diff => diff.symbolId === symbol.id && diff.found);
+
+                            return (
+                                <div
+                                    key={symbol.id}
+                                    className={`absolute text-4xl select-none transition-all duration-300 ease-out
+                                        ${isDifference ? 'cursor-pointer' : 'cursor-default'}
+                                        ${isFound ? 'ring-4 ring-green-500 ring-offset-2 rounded-full' : ''}
+                                    `}
+                                    style={{
+                                        left: `${symbol.x}%`,
+                                        top: `${symbol.y}%`,
+                                        fontSize: `${symbol.size}rem`,
+                                        transform: `translate(-50%, -50%) rotate(${symbol.rotation}deg)`,
+                                    }}
+                                    onClick={() => handleSymbolClick(symbol.id)}
+                                >
+                                    {symbol.emoji}
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    {/* 遊戲訊息 */}
+                    {message && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 text-white text-3xl font-bold rounded-xl z-20">
+                            {message}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* 遊戲結束或勝利彈出視窗 */}
+            {gameOver && showGameOverModal()}
+            {gameWon && showGameWonModal()}
+
+            {/* 設計者與書籍資訊 */}
+            <div className="w-full max-w-4xl text-center mt-8 text-gray-600 text-sm">
+                <p>設計者：鍾孟修 職能治療師 <a href="https://www.facebook.com/chungmenghsiu" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">邀請大家追蹤</a></p>
+                <p>新書「讓你健康不失智的體智能」 <a href="https://www.books.com.tw/products/0011022363?sloc=main" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">立即購買</a></p>
+            </div>
+        </div>
+    );
+};
+
+export default App;
