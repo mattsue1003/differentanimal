@@ -65,7 +65,7 @@
                 const numSymbols = getRandomInt(3 + level, 7 + level); // 符號數量隨關卡增加
                 const newLeftSymbols = [];
                 const baseSymbolSize = 4; // 基本符號大小 (rem)
-                const minSeparationPercentage = 15; // 符號中心點之間的最小百分比距離，用於避免重疊
+                const minSeparationPercentage = 20; // 符號中心點之間的最小百分比距離，增加以避免重疊
 
                 // 生成左側圖片的符號
                 for (let i = 0; i < numSymbols; i++) {
@@ -148,7 +148,6 @@
                 setRightSymbols(newRightSymbols);
                 setDifferences(newDifferences);
                 setFoundDifferencesCount(0);
-                // setTimeRemaining(90); // 移除這裡的計時器重置
                 setMessage('');
                 setGameOver(false);
                 setGameWon(false);
@@ -219,7 +218,6 @@
                     <div className="bg-white p-8 rounded-lg shadow-xl text-center">
                         <h2 className="text-3xl font-bold mb-4 text-red-600">遊戲結束！</h2>
                         <p className="text-xl mb-6">您的分數：{score}</p>
-                        {/* 最高分數和近期成績已移至下方顯示，這裡不再重複 */}
                         <button
                             onClick={restartGame}
                             className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-full transition duration-300 ease-in-out transform hover:scale-105 shadow-lg"
@@ -234,7 +232,7 @@
             const showGameWonModal = () => (
                 <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
                     <div className="bg-white p-8 rounded-lg shadow-xl text-center">
-                        <h2 className="text-3xl font-bold mb-4 text-green-600">恭喜您！</h2>
+                        <h2 className="text-3xl font-bold mb-4 text-green-600">恭恭喜您！</h2>
                         <p className="text-xl mb-6">您找到了所有差異！</p>
                         <button
                             onClick={nextLevel}
@@ -249,7 +247,11 @@
             // 遊戲開始前的歡迎畫面
             const showWelcomeScreen = () => (
                 <div className="flex flex-col items-center justify-center h-full">
-                    <h1 className="text-5xl font-extrabold text-indigo-800 mb-8 animate-bounce">動物符號大家來找碴</h1>
+                    {/* 手機版標題調整 */}
+                    <h1 className="text-5xl font-extrabold text-indigo-800 mb-8 text-center animate-bounce">
+                        <span className="block">動物符號</span>
+                        <span className="block">大家來找碴</span>
+                    </h1>
                     <p className="text-xl text-gray-700 mb-12">找出左右兩圖中所有不一樣的動物符號！</p>
                     <button
                         onClick={startGame}
@@ -334,7 +336,11 @@
                 <div className="min-h-screen bg-gradient-to-br from-blue-100 to-purple-200 font-inter flex flex-col items-center justify-center p-4">
                     {/* 遊戲標題和控制面板 */}
                     <div className="w-full max-w-4xl bg-white p-6 rounded-2xl shadow-xl mb-6 flex flex-col md:flex-row items-center justify-between gap-4">
-                        <h1 className="text-4xl font-bold text-gray-800">動物符號大家來找碴</h1>
+                        {/* 遊戲標題 - 響應式調整 */}
+                        <h1 className="text-4xl md:text-4xl font-bold text-gray-800 text-center md:text-left">
+                            <span className="block md:inline">動物符號</span>
+                            <span className="block md:inline md:ml-2">大家來找碴</span>
+                        </h1>
                         <div className="flex flex-wrap justify-center gap-4 text-lg font-semibold text-gray-700">
                             <span>關卡: {level}</span>
                             <span>分數: {score}</span>
@@ -354,7 +360,7 @@
                                 {leftSymbols.map(symbol => (
                                     <div
                                         key={symbol.id}
-                                        className="absolute text-4xl cursor-default select-none"
+                                        className="absolute text-3xl sm:text-4xl cursor-default select-none"
                                         style={{
                                             left: `${symbol.x}%`,
                                             top: `${symbol.y}%`,
@@ -377,7 +383,7 @@
                                     return (
                                         <div
                                             key={symbol.id}
-                                            className={`absolute text-4xl select-none transition-all duration-300 ease-out
+                                            className={`absolute text-3xl sm:text-4xl select-none transition-all duration-300 ease-out
                                                 ${isDifference ? 'cursor-pointer' : 'cursor-default'}
                                                 ${isFound ? 'ring-4 ring-green-500 ring-offset-2 rounded-full' : ''}
                                             `}
